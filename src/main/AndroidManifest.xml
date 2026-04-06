@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Network access for loading the KyvShield Web SDK and making API calls -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Camera for selfie liveness capture and document scanning -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Camera feature declaration (optional but recommended for store filtering) -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.autofocus"
+        android:required="false" />
+
+    <application>
+        <!--
+            KyvShield WebView Activity.
+
+            - NoActionBar theme: removes the default action bar so the SDK
+              can render in full-screen without any chrome.
+            - configChanges: prevents Activity recreation on orientation/size
+              changes (the WebView handles responsive layout itself).
+            - exported=false: never launched from outside the host app.
+            - hardwareAccelerated=true: required for smooth WebView rendering
+              and camera preview.
+        -->
+        <activity
+            android:name=".internal.KyvshieldWebViewActivity"
+            android:theme="@style/Theme.AppCompat.NoActionBar"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
+            android:windowSoftInputMode="adjustResize"
+            android:hardwareAccelerated="true"
+            android:exported="false" />
+    </application>
+
+</manifest>
