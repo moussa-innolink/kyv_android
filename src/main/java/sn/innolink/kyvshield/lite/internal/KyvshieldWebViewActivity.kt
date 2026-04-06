@@ -73,6 +73,12 @@ internal class KyvshieldWebViewActivity : AppCompatActivity() {
     // Colors derived from darkMode
     private val bgColor: Int get() = if (isDark) Color.parseColor("#0F172A") else Color.WHITE
     private val isDark: Boolean get() = darkMode == 1
+    private val primaryColorHex: String get() {
+        return try {
+            val cfg = org.json.JSONObject(configJson)
+            cfg.optJSONObject("theme")?.optString("primaryColor", "#EF8352") ?: "#EF8352"
+        } catch (_: Exception) { "#EF8352" }
+    }
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -108,7 +114,7 @@ internal class KyvshieldWebViewActivity : AppCompatActivity() {
             setBackgroundColor(bgColor)
             val textView = android.widget.TextView(this@KyvshieldWebViewActivity).apply {
                 text = "Initialisation\u2026"
-                setTextColor(if (isDark) android.graphics.Color.parseColor("#94A3B8") else android.graphics.Color.parseColor("#94A3B8"))
+                setTextColor(android.graphics.Color.parseColor(primaryColorHex))
                 textSize = 15f
                 gravity = android.view.Gravity.CENTER
             }
@@ -341,9 +347,14 @@ internal class KyvshieldWebViewActivity : AppCompatActivity() {
      * bootstrap sequence.
      */
     private fun buildHtml(): String {
-        val sdkUrl = "${baseUrl.trimEnd('/')}/static/sdk/kyvshield.$SDK_VERSION.min.js"
+        val sdkUrl = "${baseUrl.trimEnd('/')}/static/sdk/kyvshield.min.js"
         val htmlBg = if (isDark) "#0F172A" else "#FFFFFF"
         val spinnerTrack = if (isDark) "#334155" else "#F1F5F9"
+        val primaryHex = try {
+            val cfg = JSONObject(configJson)
+            val theme = cfg.optJSONObject("theme")
+            theme?.optString("primaryColor", "#EF8352") ?: "#EF8352"
+        } catch (_: Exception) { "#EF8352" }
 
         // Determine language from flow JSON
         val language = try {
@@ -361,7 +372,7 @@ internal class KyvshieldWebViewActivity : AppCompatActivity() {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; background: $htmlBg; overflow: hidden; }
     #kyc-root { width: 100%; height: 100%; }
-    /* HTML loading spinner — shown until SDK JS mounts its UI */
+    /* HTML loading — pulsing rings animation */
     #html-loading {
       position: fixed;
       inset: 0;
@@ -371,21 +382,53 @@ internal class KyvshieldWebViewActivity : AppCompatActivity() {
       justify-content: center;
       background: $htmlBg;
       z-index: 9999;
-      gap: 16px;
+      gap: 24px;
     }
-    .html-spinner {
-      width: 36px;
-      height: 36px;
-      border: 3px solid $spinnerTrack;
-      border-top-color: #EF8352;
+    .pulse-container {
+      position: relative;
+      width: 100px;
+      height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pulse-ring {
+      position: absolute;
+      border: 2px solid $primaryHex;
       border-radius: 50%;
-      animation: html-spin 0.8s linear infinite;
+      animation: pulse-expand 2.4s ease-out infinite;
     }
-    @keyframes html-spin { to { transform: rotate(360deg); } }
+    .pulse-ring:nth-child(1) { width: 90px; height: 90px; animation-delay: 0s; }
+    .pulse-ring:nth-child(2) { width: 70px; height: 70px; animation-delay: 0.4s; }
+    .pulse-ring:nth-child(3) { width: 50px;  height: 50px;  animation-delay: 0.8s; }
+    @keyframes pulse-expand {
+      0%   { transform: scale(0.5); opacity: 0.6; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
+    .loading-dots {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .loading-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: $primaryHex;
+      animation: dot-bounce 1.4s ease-in-out infinite;
+    }
+    .loading-dot:nth-child(1) { animation-delay: 0s; }
+    .loading-dot:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dot-bounce {
+      0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+      40% { opacity: 1; transform: scale(1.2); }
+    }
     .html-loading-text {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 14px;
-      color: #94A3B8;
+      color: $primaryHex;
+      letter-spacing: 0.5px;
     }
     #error-overlay {
       display: none;
@@ -417,7 +460,16 @@ internal class KyvshieldWebViewActivity : AppCompatActivity() {
 </head>
 <body>
   <div id="html-loading">
-    <div class="html-spinner"></div>
+    <div class="pulse-container">
+      <div class="pulse-ring"></div>
+      <div class="pulse-ring"></div>
+      <div class="pulse-ring"></div>
+    </div>
+    <div class="loading-dots">
+      <div class="loading-dot"></div>
+      <div class="loading-dot"></div>
+      <div class="loading-dot"></div>
+    </div>
     <span class="html-loading-text">Chargement\u2026</span>
   </div>
 
@@ -513,6 +565,27 @@ internal class KyvshieldWebViewActivity : AppCompatActivity() {
     function onSdkLoadError() {
       showError('Impossible de charger le SDK depuis le serveur ($sdkUrl).');
     }
+
+    // ── Preload model + audio while user reads intro/instructions ──────────
+    function preloadResources() {
+      try {
+        if (typeof KyvShield === 'undefined') return;
+        if (KyvShield.FaceLandmarkerService && KyvShield.FaceLandmarkerService.preloadModel) {
+          KyvShield.FaceLandmarkerService.preloadModel();
+          console.log('[KyvShield] FaceLandmarker model preload initiated');
+        }
+        if (KyvShield.KyvSoundHelper) {
+          var baseUrl = '$baseUrl';
+          KyvShield.KyvSoundHelper.setBasePath(baseUrl + '/static/sdk/assets/sounds');
+          KyvShield.KyvSoundHelper.setChallengeBasePath(baseUrl + '/static/sdk/assets/challenges');
+          KyvShield.KyvSoundHelper.setEnabled(true);
+          KyvShield.KyvSoundHelper.preloadChallengeAudio('$language');
+          console.log('[KyvShield] Audio preload initiated ($language)');
+        }
+      } catch(e) { console.warn('[KyvShield] Preload error:', e); }
+    }
+    // Start preload immediately after SDK script loads
+    preloadResources();
 
     async function bootstrapKyc() {
       try {
