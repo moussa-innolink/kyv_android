@@ -315,6 +315,7 @@ object KyvshieldLite {
             put("showResultPage",      flow.showResultPage)
             put("showSuccessPerStep",  flow.showSuccessPerStep)
             put("requireFaceMatch",    flow.requireFaceMatch)
+            put("requireAml",          flow.requireAml)
             put("playChallengeAudio",  flow.playChallengeAudio)
             put("maxChallengeAudioPlay", flow.maxChallengeAudioPlay.count)
             put("pauseBetweenAudioPlay", flow.pauseBetweenAudioPlayMs)

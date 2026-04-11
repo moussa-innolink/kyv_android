@@ -73,6 +73,9 @@ data class KyvshieldFlowConfig(
      */
     val requireFaceMatch: Boolean = true,
 
+    /** Require AML (Anti-Money Laundering) sanctions screening. Default: false */
+    val requireAml: Boolean = false,
+
     /** Play audio instructions for each challenge. Default: false */
     val playChallengeAudio: Boolean = false,
 
