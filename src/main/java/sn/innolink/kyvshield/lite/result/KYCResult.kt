@@ -635,6 +635,78 @@ data class DocumentResult(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AMLMatch
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A single AML screening match entry.
+ */
+data class AMLMatch(
+    val entityId: String,
+    val name: String,
+    val score: Double,
+    val datasets: List<String> = emptyList(),
+    val topics: List<String> = emptyList()
+) {
+    companion object {
+        fun fromJson(json: JSONObject): AMLMatch {
+            fun jsonArrayToStringList(arr: JSONArray?): List<String> {
+                if (arr == null) return emptyList()
+                return (0 until arr.length()).mapNotNull { arr.optString(it) }
+            }
+            return AMLMatch(
+                entityId = json.optString("entity_id", ""),
+                name = json.optString("name", ""),
+                score = json.optDouble("score", 0.0),
+                datasets = jsonArrayToStringList(json.optJSONArray("datasets")),
+                topics = jsonArrayToStringList(json.optJSONArray("topics"))
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AMLScreening
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * AML/sanctions screening result.
+ *
+ * Mirrors `AMLScreening` in the Flutter SDK.
+ */
+data class AMLScreening(
+    val performed: Boolean,
+    val status: String,
+    val riskLevel: String,
+    val totalMatches: Int = 0,
+    val matches: List<AMLMatch> = emptyList(),
+    val screenedAt: String? = null,
+    val durationMs: Int = 0
+) {
+    val isClear: Boolean get() = status == "clear"
+    val hasMatches: Boolean get() = status == "match" && totalMatches > 0
+
+    companion object {
+        fun fromJson(json: JSONObject): AMLScreening {
+            val matchesArray = json.optJSONArray("matches")
+            val matchesList = if (matchesArray != null) {
+                (0 until matchesArray.length()).map { AMLMatch.fromJson(matchesArray.getJSONObject(it)) }
+            } else emptyList()
+
+            return AMLScreening(
+                performed = json.optBoolean("performed", false),
+                status = json.optString("status", "disabled"),
+                riskLevel = (json.opt("riskLevel") ?: json.opt("risk_level")) as? String ?: "low",
+                totalMatches = ((json.opt("totalMatches") ?: json.opt("total_matches")) as? Number)?.toInt() ?: 0,
+                matches = matchesList,
+                screenedAt = ((json.opt("screenedAt") ?: json.opt("screened_at")) as? String)?.takeIf { it.isNotEmpty() },
+                durationMs = ((json.opt("durationMs") ?: json.opt("duration_ms")) as? Number)?.toInt() ?: 0
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // KYCResult
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -659,6 +731,7 @@ data class KYCResult(
     val selfieResult: SelfieResult? = null,
     val rectoResult: DocumentResult? = null,
     val versoResult: DocumentResult? = null,
+    val amlScreening: AMLScreening? = null,
     val rejectionReason: String? = null,
     val rejectionMessage: String? = null,
     val fraudIndicators: List<String> = emptyList(),
@@ -760,6 +833,7 @@ data class KYCResult(
             val selfieData = json.optJSONObject("selfieResult") ?: json.optJSONObject("selfie_result")
             val rectoData  = json.optJSONObject("rectoResult")  ?: json.optJSONObject("recto_result")
             val versoData  = json.optJSONObject("versoResult")  ?: json.optJSONObject("verso_result")
+            val amlData    = json.optJSONObject("amlScreening") ?: json.optJSONObject("aml_screening")
 
             return KYCResult(
                 success = json.optBoolean("success", false),
@@ -771,6 +845,7 @@ data class KYCResult(
                 selfieResult = selfieData?.let { SelfieResult.fromJson(it) },
                 rectoResult  = rectoData?.let  { DocumentResult.fromJson(it) },
                 versoResult  = versoData?.let  { DocumentResult.fromJson(it) },
+                amlScreening = amlData?.let { AMLScreening.fromJson(it) },
                 rejectionReason  = ((json.opt("rejectionReason")  ?: json.opt("rejection_reason"))  as? String)?.takeIf { it.isNotEmpty() },
                 rejectionMessage = ((json.opt("rejectionMessage") ?: json.opt("rejection_message")) as? String)?.takeIf { it.isNotEmpty() },
                 fraudIndicators  = jsonArrayToStringList(
