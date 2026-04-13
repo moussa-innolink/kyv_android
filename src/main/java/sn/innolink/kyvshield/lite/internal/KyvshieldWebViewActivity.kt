@@ -56,7 +56,7 @@ internal class KyvshieldWebViewActivity : AppCompatActivity() {
         internal const val EXTRA_DARK_MODE   = "kyv_dark_mode"   // -1=system, 0=light, 1=dark
 
         private const val TAG = "KyvShieldLite"
-        private const val SDK_VERSION = "0.0.5"
+        private const val SDK_VERSION = "0.0.4"
     }
 
     private lateinit var webView: WebView
