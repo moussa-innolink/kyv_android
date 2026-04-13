@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.result.ActivityResult
@@ -16,10 +17,16 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import sn.innolink.kyvshield.lite.api.FaceVerifyOptions
+import sn.innolink.kyvshield.lite.api.FaceVerifyResponse
+import sn.innolink.kyvshield.lite.api.HttpClient
+import sn.innolink.kyvshield.lite.api.IdentifyOptions
+import sn.innolink.kyvshield.lite.api.IdentifyResponse
 import sn.innolink.kyvshield.lite.config.KyvshieldConfig
 import sn.innolink.kyvshield.lite.config.KyvshieldFlowConfig
 import sn.innolink.kyvshield.lite.internal.KyvshieldWebViewActivity
 import sn.innolink.kyvshield.lite.result.KYCResult
+import java.io.ByteArrayOutputStream
 import kotlin.coroutines.resume
 
 /**
@@ -236,7 +243,138 @@ object KyvshieldLite {
         context.startActivity(intent)
     }
 
+    // ── Standalone API methods ────────────────────────────────────────────────
+
+    /**
+     * Face identification (1:N search).
+     *
+     * Sends a face image to the backend and returns matching identities
+     * from the registry, sorted by similarity score.
+     *
+     * This is a **suspend** function — call from a coroutine scope.
+     * The network call runs on [Dispatchers.IO].
+     *
+     * ```kotlin
+     * val config = KyvshieldConfig(baseUrl = "https://…", apiKey = "…")
+     * val imageBytes = /* JPEG/PNG bytes from camera or gallery */
+     *
+     * val response = KyvshieldLite.identify(config, imageBytes)
+     * if (response.success && response.hasMatches) {
+     *     val best = response.bestMatch!!
+     *     println("${best.fullName} — score: ${best.score}")
+     * }
+     * ```
+     *
+     * Accepts a [Bitmap] via the overload [identify(KyvshieldConfig, Bitmap, IdentifyOptions?)].
+     *
+     * @param config     SDK configuration (baseUrl + apiKey required).
+     * @param imageBytes JPEG or PNG image bytes containing a face.
+     * @param options    Optional search parameters (top_k, min_score).
+     * @return [IdentifyResponse] with matches or error details.
+     */
+    suspend fun identify(
+        config: KyvshieldConfig,
+        imageBytes: ByteArray,
+        options: IdentifyOptions? = null
+    ): IdentifyResponse = withContext(Dispatchers.IO) {
+        val client = HttpClient(
+            baseUrl    = config.baseUrl,
+            apiKey     = config.apiKey,
+            apiVersion = config.apiVersion,
+            timeoutMs  = config.timeoutSeconds * 1000
+        )
+        client.identify(imageBytes, options)
+    }
+
+    /**
+     * Face identification (1:N search) — [Bitmap] overload.
+     *
+     * Encodes the [Bitmap] as JPEG (quality 90) before sending.
+     *
+     * @see identify(KyvshieldConfig, ByteArray, IdentifyOptions?)
+     */
+    suspend fun identify(
+        config: KyvshieldConfig,
+        image: Bitmap,
+        options: IdentifyOptions? = null
+    ): IdentifyResponse = identify(config, bitmapToJpeg(image), options)
+
+    /**
+     * Face verification (1:1 comparison).
+     *
+     * Compares two face images and returns whether they belong to the
+     * same person, along with a similarity score and confidence level.
+     *
+     * - **targetImage**: Reference face (e.g. ID card photo) — single face expected.
+     * - **sourceImage**: Probe face (e.g. selfie) — may contain multiple faces.
+     *
+     * This is a **suspend** function — call from a coroutine scope.
+     * The network call runs on [Dispatchers.IO].
+     *
+     * ```kotlin
+     * val config = KyvshieldConfig(baseUrl = "https://…", apiKey = "…")
+     * val idPhoto  = /* ByteArray of the ID card photo */
+     * val selfie   = /* ByteArray of the selfie */
+     *
+     * val response = KyvshieldLite.verifyFace(config, idPhoto, selfie)
+     * if (response.success && response.isMatch) {
+     *     println("Match! Score: ${response.similarityScore}")
+     * }
+     * ```
+     *
+     * Accepts [Bitmap] arguments via the overload
+     * [verifyFace(KyvshieldConfig, Bitmap, Bitmap, FaceVerifyOptions?)].
+     *
+     * @param config           SDK configuration (baseUrl + apiKey required).
+     * @param targetImageBytes Reference face image bytes (JPEG/PNG).
+     * @param sourceImageBytes Probe face image bytes (JPEG/PNG).
+     * @param options          Optional model selection parameters.
+     * @return [FaceVerifyResponse] with match result or error details.
+     */
+    suspend fun verifyFace(
+        config: KyvshieldConfig,
+        targetImageBytes: ByteArray,
+        sourceImageBytes: ByteArray,
+        options: FaceVerifyOptions? = null
+    ): FaceVerifyResponse = withContext(Dispatchers.IO) {
+        val client = HttpClient(
+            baseUrl    = config.baseUrl,
+            apiKey     = config.apiKey,
+            apiVersion = config.apiVersion,
+            timeoutMs  = config.timeoutSeconds * 1000
+        )
+        client.verifyFace(targetImageBytes, sourceImageBytes, options)
+    }
+
+    /**
+     * Face verification (1:1 comparison) — [Bitmap] overload.
+     *
+     * Encodes both bitmaps as JPEG (quality 90) before sending.
+     *
+     * @see verifyFace(KyvshieldConfig, ByteArray, ByteArray, FaceVerifyOptions?)
+     */
+    suspend fun verifyFace(
+        config: KyvshieldConfig,
+        targetImage: Bitmap,
+        sourceImage: Bitmap,
+        options: FaceVerifyOptions? = null
+    ): FaceVerifyResponse = verifyFace(
+        config,
+        bitmapToJpeg(targetImage),
+        bitmapToJpeg(sourceImage),
+        options
+    )
+
     // ── Internal helpers ──────────────────────────────────────────────────────
+
+    /**
+     * Encode a [Bitmap] to JPEG bytes (quality 90).
+     */
+    private fun bitmapToJpeg(bitmap: Bitmap, quality: Int = 90): ByteArray {
+        val baos = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos)
+        return baos.toByteArray()
+    }
 
     /**
      * Build the [Intent] that starts [KyvshieldWebViewActivity].

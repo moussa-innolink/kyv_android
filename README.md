@@ -1,6 +1,6 @@
 # KyvShield Android SDK
 
-**KyvShield** — Android SDK for identity verification (KYC). Selfie liveness, document OCR, face matching.
+**KyvShield** — Android SDK for identity verification (KYC). Selfie liveness, document OCR, face matching, face identification, and face verification.
 
 [![](https://jitpack.io/v/moussa-innolink/kyv_android.svg)](https://jitpack.io/#moussa-innolink/kyv_android)
 
@@ -16,11 +16,11 @@ repositories {
 
 // app/build.gradle.kts
 dependencies {
-    implementation("com.github.moussa-innolink:kyv_android:0.0.3")
+    implementation("com.github.moussa-innolink:kyv_android:0.0.5")
 }
 ```
 
-## Full Example
+## Full KYC Flow Example
 
 All possible enum values listed. Code is copy-paste ready.
 
@@ -127,6 +127,123 @@ println("NIN: ${result.getExtractedValue("nin")}")
 // Loop all fields sorted by priority
 result.rectoResult?.extraction?.sortedFields?.forEach { field ->
     println("${field.label}: ${field.stringValue}")
+}
+```
+
+## Face Identification (1:N Search)
+
+Search the identity registry by face. Returns the top matching identities sorted by similarity.
+
+```kotlin
+import sn.innolink.kyvshield.lite.KyvshieldLite
+import sn.innolink.kyvshield.lite.api.*
+import sn.innolink.kyvshield.lite.config.KyvshieldConfig
+
+val config = KyvshieldConfig(
+    baseUrl = "https://kyvshield-naruto.innolinkcloud.com",
+    apiKey = "YOUR_API_KEY",
+)
+
+// imageBytes = JPEG/PNG from camera, gallery, or file
+val imageBytes: ByteArray = /* ... */
+
+// ── Basic usage ──────────────────────────────────────────────────────
+lifecycleScope.launch {
+    val response = KyvshieldLite.identify(config, imageBytes)
+
+    if (response.success && response.hasMatches) {
+        val best = response.bestMatch!!
+        println("Top match: ${best.fullName} (score: ${best.score})")
+        println("Document: ${best.documentType} — ${best.identifierValue}")
+
+        // Access extracted fields
+        best.extraction.forEach { field ->
+            println("  ${field.label}: ${field.value}")
+        }
+    } else {
+        println("No match found or error: ${response.error}")
+    }
+}
+
+// ── With options ─────────────────────────────────────────────────────
+lifecycleScope.launch {
+    val response = KyvshieldLite.identify(
+        config,
+        imageBytes,
+        options = IdentifyOptions(topK = 5, minScore = 0.7)
+    )
+    response.matches.forEach { match ->
+        println("${match.fullName}: ${match.score}")
+    }
+}
+
+// ── With a Bitmap ────────────────────────────────────────────────────
+lifecycleScope.launch {
+    val bitmap: Bitmap = /* from CameraX, ImagePicker, etc. */
+    val response = KyvshieldLite.identify(config, bitmap)
+    // ...
+}
+```
+
+## Face Verification (1:1 Comparison)
+
+Compare two face images to determine if they belong to the same person.
+
+```kotlin
+import sn.innolink.kyvshield.lite.KyvshieldLite
+import sn.innolink.kyvshield.lite.api.*
+import sn.innolink.kyvshield.lite.config.KyvshieldConfig
+
+val config = KyvshieldConfig(
+    baseUrl = "https://kyvshield-naruto.innolinkcloud.com",
+    apiKey = "YOUR_API_KEY",
+)
+
+// targetImage = reference face (ID card photo)
+// sourceImage = probe face (selfie)
+val targetImage: ByteArray = /* ... */
+val sourceImage: ByteArray = /* ... */
+
+// ── Basic usage ──────────────────────────────────────────────────────
+lifecycleScope.launch {
+    val response = KyvshieldLite.verifyFace(config, targetImage, sourceImage)
+
+    if (response.success) {
+        println("Match: ${response.isMatch}")
+        println("Similarity: ${response.similarityScore}")
+        println("Confidence: ${response.confidenceLevel}")
+        println("Target face detected: ${response.targetFaceDetected}")
+        println("Source faces count: ${response.sourceFacesCount}")
+
+        // Inspect all matches (if source had multiple faces)
+        response.matches.forEach { match ->
+            println("  Face #${match.faceIndex}: score=${match.similarityScore}, match=${match.isMatch}")
+        }
+    } else {
+        println("Error: ${response.error}")
+    }
+}
+
+// ── With custom models ───────────────────────────────────────────────
+lifecycleScope.launch {
+    val response = KyvshieldLite.verifyFace(
+        config,
+        targetImage,
+        sourceImage,
+        options = FaceVerifyOptions(
+            detectionModel = "scrfd_10g",
+            recognitionModel = "buffalo_l"
+        )
+    )
+    // ...
+}
+
+// ── With Bitmaps ─────────────────────────────────────────────────────
+lifecycleScope.launch {
+    val idPhoto: Bitmap = /* ... */
+    val selfie: Bitmap = /* ... */
+    val response = KyvshieldLite.verifyFace(config, idPhoto, selfie)
+    // ...
 }
 ```
 
