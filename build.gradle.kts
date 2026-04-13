@@ -13,7 +13,7 @@ android {
         targetSdk  = 34
 
         // Library version — matches JS SDK version for easy correlation
-        buildConfigField("String", "SDK_VERSION", "\"0.0.4\"")
+        buildConfigField("String", "SDK_VERSION", "\"0.0.5\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
@@ -79,7 +79,7 @@ publishing {
         create<MavenPublication>("release") {
             groupId    = "sn.innolink"
             artifactId = "kyvshield-lite"
-            version    = "0.0.4"
+            version    = "0.0.5"
 
             afterEvaluate {
                 from(components["release"])
